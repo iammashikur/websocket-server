@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket Messaging Client</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        #messages { height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+        input, button { margin: 5px 0; padding: 5px; width: 100%; }
+    </style>
+</head>
+<body>
+    <div id="connection-section">
+        <h2>Connect</h2>
+        <input type="text" id="token" placeholder="Enter your unique token">
+        <button onclick="connectWebSocket()">Connect</button>
+    </div>
+
+    <div id="chat-section" style="display:none;">
+        <h2>Send Message</h2>
+        <input type="text" id="recipient-token" placeholder="Recipient's Token">
+        <input type="text" id="message-content" placeholder="Message">
+        <button onclick="sendMessage()">Send</button>
+        
+        <h3>Messages</h3>
+        <div id="messages"></div>
+    </div>
+
+    <script>
+
+        //ask for notification permission
+        if (Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
+        let socket;
+        let currentToken;
+
+        function connectWebSocket() {
+            currentToken = document.getElementById('token').value;
+            if (!currentToken) {
+                alert('Please enter a token');
+                return;
+            }
+
+            socket = new WebSocket('ws://localhost:8080');
+
+            socket.onopen = function(e) {
+                console.log('WebSocket connection established');
+            };
+
+            socket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                
+                switch(data.type) {
+                    case 'request_token':
+                        socket.send(JSON.stringify({
+                            type: 'token',
+                            token: currentToken
+                        }));
+                        break;
+                    
+                    case 'token_acknowledged':
+                        document.getElementById('connection-section').style.display = 'none';
+                        document.getElementById('chat-section').style.display = 'block';
+                        break;
+                    
+                    case 'message':
+                        displayMessage(data.fromToken || 'System', data.message);
+                        break;
+                    
+                    case 'notification':
+                        showPushNotification(data.message);
+                        break;
+                    
+                    case 'error':
+                        displayMessage('Error', data.message);
+                        break;
+                }
+            };
+
+            socket.onerror = function(error) {
+                console.error('WebSocket Error:', error);
+            };
+        }
+
+        function sendMessage() {
+            const recipientToken = document.getElementById('recipient-token').value;
+            const messageContent = document.getElementById('message-content').value;
+
+            if (!recipientToken || !messageContent) {
+                alert('Please enter recipient token and message');
+                return;
+            }
+
+            socket.send(JSON.stringify({
+                type: 'message',
+                token: currentToken,
+                toToken: recipientToken,
+                message: messageContent
+            }));
+
+            document.getElementById('message-content').value = '';
+        }
+
+        function displayMessage(from, message) {
+            const messagesDiv = document.getElementById('messages');
+            const messageElement = document.createElement('div');
+            messageElement.innerHTML = `<strong>${from}:</strong> ${message}`;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function showPushNotification(message) {
+
+            console.log(message);
+
+            if (Notification.permission === 'granted') {
+                const notification = new Notification('New Message', {
+                    body: message
+                });
+                notification.onclick = function() {
+                    window.focus();
+                };
+            }
+        }
+
+        
+
+
+    </script>
+</body>
+</html>
